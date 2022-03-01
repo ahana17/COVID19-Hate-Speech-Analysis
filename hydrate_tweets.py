@@ -1,5 +1,4 @@
 import pymongo
-import pickle
 import glob
 import os
 import time
@@ -12,47 +11,34 @@ from multiprocessing import Pool
 import pandas
 import threading
 import re
-import json
 
 # get the available api keys
 with open('api_keys_hyd.txt') as f:
     df = pd.read_csv(f, sep=",")
 api_keys = df.values.tolist()
 
-class NpEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super(NpEncoder, self).default(obj)
-      
 
 num_to_month = {1: 'jan', 2: 'feb', 3: 'mar', 4: 'apr', 5: 'may', 6: 'jun', 7: 'jul'}
 
-def get_and_save_data(id_col, t, D, count, path):
+def get_and_save_data(id_col, t, mycol, count, path):
     """
     Use configured Twarc t to get full tweets given tweet ids id_col
     and save tweets in database.
     """
-    
     for tweet in t.hydrate(id_col):
+        x = None
         try:
-            D[tweet['id']]=[]
-            D[tweet['id']].append(tweet)
+            x = mycol.insert_one(tweet)
             count += 1
-            # print(count)
+            print(count)
         except:
-            # print(sys.exc_info()[1])
+            print(sys.exc_info()[1])
             print(path)
-        
-        # print(path)
-        if count >= 166668:
-        # if count >= 2: 
+        print(x)
+        print(path)
+        if count >= 166668: 
             break
-    return (count, D);
+    return count
 
 def get_date_str(num):
     """
@@ -71,6 +57,11 @@ def hydrate_ids(args):
     Parameter:
         args - an array of [api_keys, month, start_day, end_day]
     """
+    # connect to db
+    myclient = pymongo.MongoClient('mongodb://localhost:27017/')
+    mydb = myclient['covid-stigma21']
+    mycol = mydb[num_to_month[args[1]]]
+    print("Connected to db")
 
     # configure Twarc
     t = Twarc(args[0][0], args[0][1], args[0][2], args[0][3],
@@ -78,7 +69,6 @@ def hydrate_ids(args):
 
 
     for day in range(args[2], args[3] + 1):
-        D = {}
         c = 0
         mon_str = get_date_str(args[1])
         day_str = get_date_str(day)
@@ -86,44 +76,34 @@ def hydrate_ids(args):
         base_dir_A = "/home/ahana/COVID-19-TweetIDs/"
         path = base_dir_A + \
             "2021-%s/coronavirus-tweet-id-2021-%s-%s-*.txt" \
-            % (mon_str, mon_str, day_str)
+             % (mon_str, mon_str, day_str)
         for file in glob.glob(path):
             try:
                 with open(file) as f:
-                    c, D = get_and_save_data(f, t, D, c, file)
+                    c = get_and_save_data(f, t, mycol, c, file)
                     
             except:
-                print(path)
+                print(path + '\n' + sys.exc_info()[1])
 
-          
+        
         # process dataset 2
-        if (args[1] > 2) and (c < 166668):
+        if args[1] > 2:
             base_dir_B = "/home/ahana/covid19_twitter/"
             path = base_dir_B + \
             "dailies/2021-%s-%s/2021-%s-%s-dataset.tsv.gz" \
-            % (mon_str, day_str, mon_str, day_str)
+             % (mon_str, day_str, mon_str, day_str)
             if os.path.exists(path):
                 #log_file.write('[start] [%s] %s\n' % (time.ctime(), path))
                 df = pd.read_csv(path, sep='\t')
                 try:
-                    c, D = get_and_save_data(df['tweet_id'].tolist(), t,
-                                     D, c, path)
+                    c = get_and_save_data(df['tweet_id'].tolist(), t,
+                                    mycol, c, path)
 
                 except:
-                    print(path)
-        
-        filename = "Hydrated Tweets" + " " + mon_str + "/" + day_str  
-        # print(D) 
-        # with open(filename, 'wb') as file:
-        #    pickle.dump(D, file) 
-
-        
-        if not os.path.exists("/home/ahana/Hydrated_Tweets/"):
-            os.makedirs("/home/ahana/Hydrated_Tweets/")
-        with open("/home/ahana/Hydrated_Tweets/" + mon_str + "-" + day_str + ".json", "w+") as f2:
-            json.dump(D, f2, cls=NpEncoder)  
-        print(filename)    
+                    print(path + '\n' + sys.exc_info()[1])
+          
   
+
 
 def main(month):
     """
@@ -146,20 +126,7 @@ def main(month):
         threads[m].join()
 
 
-def finish_jan():
-    args = []
-    for i in range(1, 11): #
-        args.append([api_keys[i-1], 1, i, i]) # 
-    threads = []
-    for k in range(10):
-        thread = threading.Thread(target=hydrate_ids, args=(args[k],))
-        threads.append(thread)
-        thread.start()
-    for m in range(10):
-        threads[m].join()
-
 if __name__ == '__main__':
     print('start', time.ctime())
-    main(1) # for Jan, change acc. for other months
-    # finish_jan()
+    main(3) # 3 for March, change acc for other months
     print(time.ctime())
