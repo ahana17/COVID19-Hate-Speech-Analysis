@@ -75,7 +75,7 @@ def getNameByMon(mon):
     dir = "keyword_based_dataset_no_dup/" + mon.name + "/" + mon.name + " " + d_str + ".csv"
     if os.path.exists(dir):
       df = pd.read_csv(dir, encoding='utf-8', parse_dates=["created_at"])
-      for i in range(0,len(df['user_sn'])-1):
+      for i in range(len(df['user_sn'])):
 
          if df['user_sn'][i] in D:
           
