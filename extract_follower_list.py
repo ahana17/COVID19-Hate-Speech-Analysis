@@ -124,7 +124,7 @@ def follower_ids(args):
 
     field_names = ['Name','Fol']
     for day in range(args[2], args[3] + 1): 
-      d_str = get_date_str(day-1)
+      
 
       if day==31:
         for i in range(38*(day-1),1183):
